@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Jeemo Workspace</title>
+
+  <!-- 
+       EXTERNAL DEPENDENCIES (CDN — all pinned to stable versions)
+        -->
+
+  <!-- FontAwesome 6 — icons throughout the sidebar & UI -->
+  <link rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
+        crossorigin="anonymous" />
+
+  <!-- Xterm.js — the terminal emulator canvas -->
+  <link rel="stylesheet"
+        href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css" />
+  <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
+  <!-- Xterm FitAddon — auto-resizes the terminal to its container -->
+  <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
+
+  <!-- Marked.js — Markdown  HTML for chat bubbles -->
+  <script src="https://cdn.jsdelivr.net/npm/marked@11.1.1/marked.min.js"></script>
+
+  <!-- Pyodide — full CPython 3.11 in WebAssembly (official CDN, v0.26.4) -->
+  <script src="https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js"></script>
+
+  <!-- Our styles -->
+  <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+  <!-- 
+       ROOT LAYOUT — CSS Grid: sidebar | workspace
+        -->
+  <div id="app-root">
+
+    <!--  LEFT SIDEBAR  -->
+    <aside id="sidebar">
+
+      <!-- Logo / brand -->
+      <div id="sidebar-logo">
+        <span class="logo-icon"><i class="fa-solid fa-hexagon-nodes"></i></span>
+        <span class="logo-text">Jeemo<span class="logo-accent">.</span></span>
+      </div>
+
+      <!-- File Explorer -->
+      <section id="file-explorer">
+        <header class="section-header">
+          <i class="fa-solid fa-folder-tree"></i>
+          <span>File Explorer</span>
+          <button id="btn-refresh-tree" title="Refresh tree" class="icon-btn">
+            <i class="fa-solid fa-arrows-rotate"></i>
+          </button>
+        </header>
+
+        <!-- Virtual file tree — populated by app.js -->
+        <div id="file-tree">
+          <ul class="tree-root" id="tree-root-ul">
+            <!-- Injected dynamically -->
+            <li class="tree-loading">
+              <i class="fa-solid fa-circle-notch fa-spin"></i> Initialising…
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- Spacer pushes API key panel to the bottom -->
+      <div class="sidebar-spacer"></div>
+
+      <!-- API Key panel -->
+      <section id="api-key-panel">
+        <header class="section-header">
+          <i class="fa-solid fa-key"></i>
+          <span>Groq API Key</span>
+        </header>
+        <div class="api-key-body">
+          <div class="input-wrapper">
+            <input
+              type="password"
+              id="api-key-input"
+              placeholder="gsk_…"
+              autocomplete="off"
+              spellcheck="false"
+            />
+            <button id="btn-toggle-key" class="icon-btn" title="Show / hide key">
+              <i class="fa-solid fa-eye"></i>
+            </button>
+          </div>
+          <button id="btn-save-key" class="primary-btn">
+            <i class="fa-solid fa-plug"></i> Connect
+          </button>
+          <div id="api-status" class="status-badge status-disconnected">
+            <i class="fa-solid fa-circle"></i> Disconnected
+          </div>
+        </div>
+      </section>
+
+    </aside><!-- /sidebar -->
+
+    <!--  MAIN WORKSPACE  -->
+    <main id="workspace">
+
+      <!-- TOP: Chat UI -->
+      <section id="chat-panel">
+        <header class="panel-header">
+          <span class="panel-title">
+            <i class="fa-solid fa-message-bot"></i> Jeemo Agent Chat
+          </span>
+          <div class="panel-controls">
+            <button id="btn-clear-chat" class="icon-btn" title="Clear chat">
+              <i class="fa-solid fa-broom"></i>
+            </button>
+          </div>
+        </header>
+
+        <!-- Message list — scrollable -->
+        <div id="chat-messages">
+          <!-- Welcome message injected by app.js -->
+        </div>
+
+        <!-- Composer -->
+        <div id="chat-composer">
+          <div class="composer-inner">
+            <textarea
+              id="chat-input"
+              placeholder="Ask Jeemo to write code, create files, analyse data…"
+              rows="1"
+              autocomplete="off"
+              spellcheck="true"
+            ></textarea>
+            <button id="btn-send" title="Send (Enter)">
+              <i class="fa-solid fa-paper-plane-top"></i>
+            </button>
+          </div>
+          <p class="composer-hint">
+            <kbd>Enter</kbd> to send &nbsp;·&nbsp; <kbd>Shift+Enter</kbd> for newline
+          </p>
+        </div>
+      </section>
+
+      <!-- BOTTOM: Terminal -->
+      <section id="terminal-panel">
+        <header class="panel-header">
+          <span class="panel-title">
+            <i class="fa-solid fa-terminal"></i> Jeemo Execution Terminal
+          </span>
+          <div class="panel-controls">
+            <button id="btn-clear-terminal" class="icon-btn" title="Clear terminal">
+              <i class="fa-solid fa-trash-can"></i>
+            </button>
+            <span id="pyodide-status" class="status-chip chip-loading">
+              <i class="fa-solid fa-circle-notch fa-spin"></i> Loading Python…
+            </span>
+          </div>
+        </header>
+
+        <!-- Xterm.js mounts here -->
+        <div id="terminal-container"></div>
+      </section>
+
+    </main><!-- /workspace -->
+
+  </div><!-- /app-root -->
+
+  <!-- File viewer modal — for reading virtual FS files -->
+  <div id="file-modal" class="modal-overlay hidden">
+    <div class="modal-box">
+      <header class="modal-header">
+        <span id="modal-filename"><i class="fa-solid fa-file-code"></i> file.txt</span>
+        <button id="btn-modal-close" class="icon-btn"><i class="fa-solid fa-xmark"></i></button>
+      </header>
+      <pre id="modal-content" class="modal-pre"></pre>
+    </div>
+  </div>
+
+  <!-- Our application logic (loaded last so DOM is ready) -->
+  <script src="app.js"></script>
+</body>
+</html>
